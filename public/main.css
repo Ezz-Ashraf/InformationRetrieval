@@ -19,10 +19,17 @@ form {
     text-decoration: none;
     font: inherit;
     border: 1px solid #00695c;
-    color: #00695c;
-    background: white;
+    color: whitesmoke;
+    background: green;
     border-radius: 3px;
     cursor: pointer;
+  }
+
+
+  a {
+position: absolute;
+top:25%;
+left: 47%;
   }
   
   button:hover,

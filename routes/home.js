@@ -6,5 +6,6 @@ const homeController = require('../controllers/home');
 
 router.get('/',homeController.homePage);
 router.post('/',homeController.setQuery);
-router.get('/report/:queryText',homeController.printReport);
+router.get('/report/',homeController.printInitialReport);
+router.get('/report/:queryText',homeController.printQueryReport);
 module.exports=router;

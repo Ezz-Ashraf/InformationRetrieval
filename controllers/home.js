@@ -3,6 +3,64 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 
 
+
+//Testing Cosine Similarity
+
+function wordCountMap(str){
+  let words = str.split(' ');
+  let wordCount = {};
+  words.forEach((w)=>{
+      wordCount[w] = (wordCount[w] || 0) +1;
+
+  });
+return wordCount;
+}
+
+function addWordsToDictionary(wordCountmap, dict){
+  for(let key in wordCountmap){
+      dict[key] = true;
+  }
+}
+
+function wordMapToVector(map,dict){
+  let wordCountVector = [];
+  for (let term in dict){
+      wordCountVector.push(map[term] || 0);
+  }
+  return wordCountVector;
+}
+
+function dotProduct(vecA, vecB){
+  let product = 0;
+  for(let i=0;i<vecA.length;i++){
+      product += vecA[i] * vecB[i];
+  }
+  return product;
+}
+
+function magnitude(vec){
+  let sum = 0;
+  for (let i = 0;i<vec.length;i++){
+      sum += vec[i] * vec[i];
+  }
+  return Math.sqrt(sum);
+}
+
+function cosineSimilarity(vecA,vecB){
+  return dotProduct(vecA,vecB)/ (magnitude(vecA) * magnitude(vecB));
+}
+
+function textCosineSimilarity(txtA,txtB){
+  const wordCountA = wordCountMap(txtA);
+  const wordCountB = wordCountMap(txtB);
+  let dict = {};
+  addWordsToDictionary(wordCountA,dict);
+  addWordsToDictionary(wordCountB,dict);
+  const vectorA = wordMapToVector(wordCountA,dict);
+  const vectorB = wordMapToVector(wordCountB,dict);
+  return cosineSimilarity(vectorA, vectorB);
+}
+
 function removeStopWords(sentence)
 {
   const stopWords =["'d",
@@ -289,7 +347,7 @@ function removeStopWords(sentence)
   'when',
   'whence',
   'whenever',
-  'where',
+ // 'where',
   'whereafter',
   'whereas',
   'whereby',
@@ -342,6 +400,15 @@ sentence.forEach( word =>{
 return pureSentence.join(" ")
 }
 
+function preprocessing(sentence)
+{
+  sentence = sentence.trim()
+  sentence = sentence.toLowerCase()
+  sentence = removeStopWords(sentence.split(" "))
+  console.log(sentence)
+  return sentence
+}
+
 function getPosiition(text , word ) {
   let positions  = []
   for(let i=0;i<text.length;i++)
@@ -352,6 +419,83 @@ function getPosiition(text , word ) {
       }
   }
   return positions;
+}
+
+//Algorithm of retrieving information using query
+
+function searchquery(positionalIndex,query) 
+{
+  let matchedDocumentsSet=new Set();
+  let matchedDocuments=[];
+  if(query.length===1){
+if(positionalIndex[query[0]] !=null)
+{
+  console.log("Entered")
+  positionalIndex[query[0]].forEach( doc => {
+    matchedDocumentsSet.add(doc.document)
+  })
+
+  return matchedDocumentsSet;
+}
+  }
+
+  else {
+    for(let i =0;i<(query.length )-1;i++)
+    {
+      matchedDocuments = []
+      if(positionalIndex[query[i]] !=null  && positionalIndex[query[i+1]] !=null)
+      {
+        
+        let firstDocQuery = []
+        positionalIndex[query[i]].forEach( doc => {
+          firstDocQuery.push(doc)
+        })
+        let secondDocQuery = []
+        positionalIndex[query[i+1]].forEach( doc => {
+          secondDocQuery.push(doc)
+        })
+    for(let j =0 ;j<firstDocQuery.length;j++)
+    {
+      for(let k =0 ;k<secondDocQuery.length;k++) 
+      {
+        if(firstDocQuery[j].document === secondDocQuery[k].document )
+        {
+
+          for(let n =0; n<firstDocQuery[j].positions.length;n++){
+            for(let m =0; m<secondDocQuery[k].positions.length;m++){
+            if(firstDocQuery[j].positions[n] === secondDocQuery[k].positions[m] -1 )
+            {
+              console.log("Entered")
+              matchedDocuments.push(firstDocQuery[j].document)
+            }
+            }
+          }
+        }
+      }
+    }
+      }
+      else {
+        break;
+      }
+      if(matchedDocuments.length>0)
+      {
+        matchedDocuments.forEach(doc =>{
+          matchedDocumentsSet.add(doc)
+        })
+      }
+    }
+
+  }
+
+  let intersectedDocs =new Set();
+
+  matchedDocuments.forEach(doc =>{
+if(matchedDocumentsSet.has(doc))
+{
+  intersectedDocs.add(doc)
+}
+  })
+return intersectedDocs
 }
 
 function bubbleSort( arr )
@@ -414,9 +558,7 @@ filenames.sort((a,b) =>{
     filenames.forEach(function(filename) {
      let originalContent = fs.readFileSync(dirname + filename, 'utf-8')
      filename = filename.split(".")[0]
-     originalContent = originalContent.trim()
-     originalContent = originalContent.toLowerCase()
-    originalContent = removeStopWords(originalContent.split(" "))
+      originalContent = preprocessing(originalContent)
      content = originalContent.split(" ")
      //documentContents[filename] = content
      documentContents.push({
@@ -468,10 +610,29 @@ words.forEach(word =>{
 })
 
 })
+let docLength = []
 
+for(let i =0;i<filenames.length;i++)
+{
+  let sumSquared = 0
+  for(let j=0; j<frequency.length;j+=filenames.length)
+  {
+   sumSquared += Math.pow((frequency[ i+j ].tfIdf),2)
+  }
+  docLength.push(Math.sqrt(sumSquared))
+}
+for(let i =0;i<filenames.length;i++)
+{
+
+  for(let j=0; j<frequency.length;j+=filenames.length)
+  {
+  frequency[ i+j ].NormTfidf =  frequency[ i+j ].tfIdf/docLength[i]
+  }
+}
+//console.log(frequency)
 
 return {
-  positionalIndex , frequency, inverseFrequency ,filenames, words
+  positionalIndex , frequency, inverseFrequency ,filenames, words ,docLength ,documentContents
 }
 }
 
@@ -486,12 +647,12 @@ exports.homePage = (req, res, next) => {
 
 exports.setQuery = (req, res, next) => {
   const query = req.body.queryText;
-
+console.log(query)
   res.redirect('/report/'+query)
 }
 
-exports.printReport = (req, res, next) => {
-  const queryText = req.params.queryText
+exports.printInitialReport = (req, res, next) => {
+ 
  const data= readFilesSync( path.join(__dirname,'..', 'DocumentCollection/'))
   const reportName = 'report.pdf';
   const reportPath = path.join(__dirname,'..', 'data', reportName);
@@ -508,11 +669,7 @@ pdfDoc.text("")
 pdfDoc.fontSize(22).text('positional Index' , {
   align:'center'
   });
-// for (const [word, docs] of Object.entries(data.positionalIndex)) {
-//    for (const [doc, positions] of Object.entries(docs))  {
-//      pdfDoc.fontSize(16).text('word ' +word+' appeared at document '+doc +" at positions " +positions)
-//    }
-  //pdfDoc.fontSize(16).text('word '+word +" appears at documents " + Object.keys(docs));
+
   data.words.forEach(word =>{
     data.positionalIndex[word].forEach(record =>{
       pdfDoc.fontSize(16).text('word ' +word+' appeared at document '+record.document +" at positions " +record.positions)
@@ -591,6 +748,7 @@ pdfDoc.fontSize(22).text('Inverse Document Frequency' , {
 })
     y+=30
   })
+  //TF-IDF
   pdfDoc.addPage()
 pdfDoc.fontSize(22).text('TF-IDF' , {
   align:'center'
@@ -638,5 +796,319 @@ data.frequency.forEach(freq =>{
  
 })
 
+//Document Length
+pdfDoc.addPage()
+pdfDoc.fontSize(22).text('Document Length' , {
+  align:'center'
+  });
+
+  x=100
+  y= 130
+ for(let i =0;i<data.filenames.length;i++) {
+    pdfDoc.rect(x, y, 55, 30).stroke();
+    pdfDoc.fontSize(12).text(data.filenames[i].split(".")[0], x+3, y+5, {
+          features: ['rtl'],
+          width: 80,
+    })
+
+    pdfDoc.rect(x+55, y, 150, 30).stroke();
+    pdfDoc.fontSize(12).text(  data.docLength[i], x+58, y+5, {
+      features: ['rtl'],
+      width: 130,
+})
+
+
+    y+=30
+  }
+
+//Normalized TF-IDF
+
+pdfDoc.addPage()
+pdfDoc.fontSize(22).text('Normalized TF-IDF' , {
+  align:'center'
+  });
+
+   x = 65;
+   y=130;
+  data.filenames.forEach(doc =>{
+  pdfDoc.rect(x, 100, 35, 30).stroke();
+  pdfDoc.fontSize(12).text(doc.split(".")[0], x+15, 105, {
+        features: ['rtl'],
+        width: 80,
+  })
+
+  x+=35
+})
+x=10
+data.words.forEach(word =>{
+  pdfDoc.rect(x, y, 55, 30).stroke();
+  pdfDoc.fontSize(12).text(word, x+3, y+5, {
+        features: ['rtl'],
+        width: 80,
+  })
+
+  y+=30
+})
+x=65
+y= 130
+counter = 0
+data.frequency.forEach(freq =>{
+
+  if(counter%docCounts === 0 && counter !=1 && counter!=0 )
+  {
+    x=65
+    y+=30
+  }
+    counter+=1
+  pdfDoc.rect(x, y, 35, 30).stroke();
+  pdfDoc.fontSize(12).text(freq.NormTfidf.toFixed(3), x+3, y+5, {
+        features: ['rtl'],
+        width: 80,
+  })
+  x+=35
+
+ 
+})
+
 pdfDoc.end();
 }
+
+
+exports.printQueryReport = (req,res,next) =>{
+  let queryText = req.params.queryText
+  const data= readFilesSync( path.join(__dirname,'..', 'DocumentCollection/'))
+   const reportName = 'report.pdf';
+   const reportPath = path.join(__dirname,'..', 'data', reportName);
+   res.setHeader('Content-Type', 'application/pdf');
+   res.setHeader('Content-Disposition' , 'inline; filename = "' + reportName + '"');
+   pdfDoc = new PDFDocument();
+   pdfDoc.pipe(fs.createWriteStream(reportPath));
+   pdfDoc.pipe(res);
+   pdfDoc.fontSize(26).text('Information Retrieval Report' , {
+ underline:true,
+ align:'center'
+ });
+ pdfDoc.text("")
+ pdfDoc.fontSize(22).text('positional Index' , {
+   align:'center'
+   });
+
+   data.words.forEach(word =>{
+     data.positionalIndex[word].forEach(record =>{
+       pdfDoc.fontSize(16).text('word ' +word+' appeared at document '+record.document +" at positions " +record.positions)
+     })
+   })
+ pdfDoc.addPage()
+ pdfDoc.fontSize(22).text('Term Frequency' , {
+   align:'center'
+   });
+   let x = 65,y=130;
+   data.filenames.forEach(doc =>{
+   pdfDoc.rect(x, 100, 35, 30).stroke();
+   pdfDoc.fontSize(12).text(doc.split(".")[0], x+15, 105, {
+         features: ['rtl'],
+         width: 80,
+   })
+ 
+   x+=35
+ })
+ x=10
+ data.words.forEach(word =>{
+   pdfDoc.rect(x, y, 55, 30).stroke();
+   pdfDoc.fontSize(12).text(word, x+3, y+5, {
+         features: ['rtl'],
+         width: 80,
+   })
+ 
+   y+=30
+ })
+ x=65
+ y= 130
+ let counter = 0
+ let docCounts = data.filenames.length
+ data.frequency.forEach(freq =>{
+ 
+   if(counter%docCounts === 0 && counter !=1 && counter!=0 )
+   {
+     x=65
+     y+=30
+   }
+     counter+=1
+   pdfDoc.rect(x, y, 35, 30).stroke();
+   pdfDoc.fontSize(12).text(freq.value/*.toFixed(3)*/, x+3, y+5, {
+         features: ['rtl'],
+         width: 80,
+   })
+   x+=35
+ 
+  
+ })
+ 
+ pdfDoc.addPage()
+ pdfDoc.fontSize(22).text('Inverse Document Frequency' , {
+   align:'center'
+   });
+ 
+   x=100
+   y= 130
+   data.words.forEach(word =>{
+     pdfDoc.rect(x, y, 55, 30).stroke();
+     pdfDoc.fontSize(12).text(word, x+3, y+5, {
+           features: ['rtl'],
+           width: 80,
+     })
+ 
+     pdfDoc.rect(x+55, y, 55, 30).stroke();
+     pdfDoc.fontSize(12).text(  data.positionalIndex[word].length, x+58, y+5, {
+       features: ['rtl'],
+       width: 80,
+ })
+ 
+     pdfDoc.rect(x+110, y, 55, 30).stroke();
+     pdfDoc.fontSize(12).text(  data.inverseFrequency[word].toFixed(5), x+113, y+5, {
+       features: ['rtl'],
+       width: 80,
+ })
+     y+=30
+   })
+   //TF-IDF
+   pdfDoc.addPage()
+ pdfDoc.fontSize(22).text('TF-IDF' , {
+   align:'center'
+   });
+ 
+    x = 65;
+    y=130;
+   data.filenames.forEach(doc =>{
+   pdfDoc.rect(x, 100, 35, 30).stroke();
+   pdfDoc.fontSize(12).text(doc.split(".")[0], x+15, 105, {
+         features: ['rtl'],
+         width: 80,
+   })
+ 
+   x+=35
+ })
+ x=10
+ data.words.forEach(word =>{
+   pdfDoc.rect(x, y, 55, 30).stroke();
+   pdfDoc.fontSize(12).text(word, x+3, y+5, {
+         features: ['rtl'],
+         width: 80,
+   })
+ 
+   y+=30
+ })
+ x=65
+ y= 130
+ counter = 0
+ data.frequency.forEach(freq =>{
+ 
+   if(counter%docCounts === 0 && counter !=1 && counter!=0 )
+   {
+     x=65
+     y+=30
+   }
+     counter+=1
+   pdfDoc.rect(x, y, 35, 30).stroke();
+   pdfDoc.fontSize(12).text(freq.tfIdf.toFixed(3), x+3, y+5, {
+         features: ['rtl'],
+         width: 80,
+   })
+   x+=35
+ 
+  
+ })
+ 
+ //Document Length
+ pdfDoc.addPage()
+ pdfDoc.fontSize(22).text('Document Length' , {
+   align:'center'
+   });
+ 
+   x=100
+   y= 130
+  for(let i =0;i<data.filenames.length;i++) {
+     pdfDoc.rect(x, y, 55, 30).stroke();
+     pdfDoc.fontSize(12).text(data.filenames[i].split(".")[0], x+3, y+5, {
+           features: ['rtl'],
+           width: 80,
+     })
+ 
+     pdfDoc.rect(x+55, y, 150, 30).stroke();
+     pdfDoc.fontSize(12).text(  data.docLength[i], x+58, y+5, {
+       features: ['rtl'],
+       width: 130,
+ })
+ 
+ 
+     y+=30
+   }
+ 
+ //Normalized TF-IDF
+ 
+ pdfDoc.addPage()
+ pdfDoc.fontSize(22).text('Normalized TF-IDF' , {
+   align:'center'
+   });
+ 
+    x = 65;
+    y=130;
+   data.filenames.forEach(doc =>{
+   pdfDoc.rect(x, 100, 35, 30).stroke();
+   pdfDoc.fontSize(12).text(doc.split(".")[0], x+15, 105, {
+         features: ['rtl'],
+         width: 80,
+   })
+ 
+   x+=35
+ })
+ x=10
+ data.words.forEach(word =>{
+   pdfDoc.rect(x, y, 55, 30).stroke();
+   pdfDoc.fontSize(12).text(word, x+3, y+5, {
+         features: ['rtl'],
+         width: 80,
+   })
+ 
+   y+=30
+ })
+ x=65
+ y= 130
+ counter = 0
+ data.frequency.forEach(freq =>{
+ 
+   if(counter%docCounts === 0 && counter !=1 && counter!=0 )
+   {
+     x=65
+     y+=30
+   }
+     counter+=1
+   pdfDoc.rect(x, y, 35, 30).stroke();
+   pdfDoc.fontSize(12).text(freq.NormTfidf.toFixed(3), x+3, y+5, {
+         features: ['rtl'],
+         width: 80,
+   })
+   x+=35
+ 
+  
+ })
+ 
+ pdfDoc.addPage();
+
+ queryText =preprocessing(queryText);
+
+let matchedDocumentsSet = searchquery(data.positionalIndex,queryText.split(" "))
+matchedDocuments = Array.from(matchedDocumentsSet)
+pdfDoc.fontSize(22).text('Matched Documents For the query' , {
+  align:'center'
+  });
+
+
+  pdfDoc.fontSize(22).text('Matched Documents Are:' + matchedDocuments )
+
+console.log(textCosineSimilarity("Brutus Anthony","Brutus angels").toFixed(4))
+
+ pdfDoc.end();
+}
+
+
