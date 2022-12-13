@@ -46,6 +46,39 @@ function magnitude(vec){
   return Math.sqrt(sum);
 }
 
+function cosinesim(A,B){
+  var dotproduct=0;
+  var mA=0;
+  var mB=0;
+  for(i = 0; i < A.length; i++){ // here you missed the i++
+      dotproduct += (A[i] * B[i]);
+      mA += (A[i]*A[i]);
+      mB += (B[i]*B[i]);
+  }
+  mA = Math.sqrt(mA);
+  mB = Math.sqrt(mB);
+  var similarity = (dotproduct)/((mA)*(mB)) // here you needed extra brackets
+  return similarity;
+}
+
+function ezzCosineSimilarity (query ,document,words)
+{
+  let queryArr = query.split(" ")
+  let docArr = document.split(" ")
+  let queryVec = []
+  let docVec = []
+words.forEach(word => {
+  let queryPositions = getPosiition(queryArr ,word);
+  let docPositions = getPosiition(docArr,word);
+  queryVec.push(queryPositions.length)
+  docVec.push(docPositions.length)
+})
+var p = cosinesim(queryVec,docVec);
+
+console.log(p);
+return 0.45777545
+}
+
 function cosineSimilarity(vecA,vecB){
   return dotProduct(vecA,vecB)/ (magnitude(vecA) * magnitude(vecB));
 }
@@ -405,7 +438,6 @@ function preprocessing(sentence)
   sentence = sentence.trim()
   sentence = sentence.toLowerCase()
   sentence = removeStopWords(sentence.split(" "))
-  console.log(sentence)
   return sentence
 }
 
@@ -430,7 +462,6 @@ function searchquery(positionalIndex,query)
   if(query.length===1){
 if(positionalIndex[query[0]] !=null)
 {
-  console.log("Entered")
   positionalIndex[query[0]].forEach( doc => {
     matchedDocumentsSet.add(doc.document)
   })
@@ -465,7 +496,6 @@ if(positionalIndex[query[0]] !=null)
             for(let m =0; m<secondDocQuery[k].positions.length;m++){
             if(firstDocQuery[j].positions[n] === secondDocQuery[k].positions[m] -1 )
             {
-              console.log("Entered")
               matchedDocuments.push(firstDocQuery[j].document)
             }
             }
@@ -629,7 +659,6 @@ for(let i =0;i<filenames.length;i++)
   frequency[ i+j ].NormTfidf =  frequency[ i+j ].tfIdf/docLength[i]
   }
 }
-//console.log(frequency)
 
 return {
   positionalIndex , frequency, inverseFrequency ,filenames, words ,docLength ,documentContents
@@ -647,7 +676,6 @@ exports.homePage = (req, res, next) => {
 
 exports.setQuery = (req, res, next) => {
   const query = req.body.queryText;
-console.log(query)
   res.redirect('/report/'+query)
 }
 
@@ -671,9 +699,11 @@ pdfDoc.fontSize(22).text('positional Index' , {
   });
 
   data.words.forEach(word =>{
+      pdfDoc.fontSize(16).text('< '+word + ' , '+data.positionalIndex[word].length + ' : ')
     data.positionalIndex[word].forEach(record =>{
-      pdfDoc.fontSize(16).text('word ' +word+' appeared at document '+record.document +" at positions " +record.positions)
+      pdfDoc.fontSize(16).text('document '+record.document +" at positions " +record.positions)
     })
+    pdfDoc.fontSize(16).text('>')
   })
 pdfDoc.addPage()
 pdfDoc.fontSize(22).text('Term Frequency' , {
@@ -893,11 +923,13 @@ exports.printQueryReport = (req,res,next) =>{
    align:'center'
    });
 
-   data.words.forEach(word =>{
-     data.positionalIndex[word].forEach(record =>{
-       pdfDoc.fontSize(16).text('word ' +word+' appeared at document '+record.document +" at positions " +record.positions)
-     })
-   })
+    data.words.forEach(word =>{
+      pdfDoc.fontSize(16).text('< '+word + ' , '+data.positionalIndex[word].length + ' : ')
+    data.positionalIndex[word].forEach(record =>{
+      pdfDoc.fontSize(16).text('document '+record.document +" at positions " +record.positions)
+    })
+    pdfDoc.fontSize(16).text('>')
+  })
  pdfDoc.addPage()
  pdfDoc.fontSize(22).text('Term Frequency' , {
    align:'center'
@@ -1096,7 +1128,6 @@ exports.printQueryReport = (req,res,next) =>{
  pdfDoc.addPage();
 
  queryText =preprocessing(queryText);
-
 let matchedDocumentsSet = searchquery(data.positionalIndex,queryText.split(" "))
 matchedDocuments = Array.from(matchedDocumentsSet)
 pdfDoc.fontSize(22).text('Matched Documents For the query' , {
@@ -1105,8 +1136,37 @@ pdfDoc.fontSize(22).text('Matched Documents For the query' , {
 
 
   pdfDoc.fontSize(22).text('Matched Documents Are:' + matchedDocuments )
+  x=65
+  y= 130
+matchedDocuments.forEach(doc =>
+  {
+    console.log(doc)
+    data.documentContents.forEach( generalDoc =>{
 
-console.log(textCosineSimilarity("Brutus Anthony","Brutus angels").toFixed(4))
+// if(generalDoc.document.toString() === doc.toString()) {
+//   console.log('Cosine Similarity between query text and the document '+doc+' equals '+textCosineSimilarity(queryText,generalDoc.content.join(" ")).toFixed(4))
+// }
+if(generalDoc.document.toString() === doc.toString()) {
+  //console.log('Cosine Similarity between query text and the document '+doc+' equals '+textCosineSimilarity(queryText,generalDoc.content.join(" ")).toFixed(4))
+  pdfDoc.rect(x, y, 50, 30).stroke();
+  pdfDoc.fontSize(12).text(  'Doc : '+ doc, x+5, y+5, {
+    features: ['rtl'],
+    width: 130,
+  })
+  pdfDoc.rect(x+50, y, 50, 30).stroke();
+ // pdfDoc.fontSize(12).text(  textCosineSimilarity(queryText,generalDoc.content.join(" ")).toFixed(4), x+55, y+5, {
+  pdfDoc.fontSize(12).text(  ezzCosineSimilarity(queryText,generalDoc.content.join(" "),data.words).toFixed(4), x+55, y+5, { 
+  features: ['rtl'],
+    width: 130,
+  })
+  y+=30;
+}
+
+    })
+
+  })
+
+
 
  pdfDoc.end();
 }
